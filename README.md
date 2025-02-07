@@ -26,3 +26,14 @@
    ```text
    http://localhost:3000
    ```
+
+### For lint checks and production build
+   ```bash
+   pnpm lint
+   ```
+   ```bash
+   pnpm build
+   ```
+   ```bash
+   pnpm start
+   ```
