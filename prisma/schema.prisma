@@ -1,0 +1,357 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String             @id @default(cuid())
+  name              String?
+  email             String             @unique
+  emailVerified     DateTime?
+  image             String?
+  phone             String?
+  role              Role               @default(ADMIN)
+  isActive          Boolean            @default(true)
+  profileCompletion Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  companyDetails    CompanyDetails?
+  settings          Json?              @default("{\"theme\": \"system\"}")
+  accounts          Account[]
+  sessions          Session[]
+  Authenticator     Authenticator[]
+  customers         Customer[]
+  transactions      Transaction[]
+  transactionAudits TransactionAudit[]
+  rewardPolicies    RewardPolicy[]
+  promotions        Promotion[]
+  employees         Employee[]
+  taxDetails        TaxDetails[]
+  gifts             GiftCard[]
+  subscription      Subscription?
+
+  @@index([name, isActive])
+  @@map("Vendor")
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model Authenticator {
+  credentialID         String  @unique
+  userId               String
+  providerAccountId    String
+  credentialPublicKey  String
+  counter              Int
+  credentialDeviceType String
+  credentialBackedUp   Boolean
+  transports           String?
+  user                 User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, credentialID])
+}
+
+model Employee {
+  id          String         @id @default(uuid())
+  name        String
+  email       String
+  password    String
+  role        Role           @default(EMPLOYEE)
+  status      EmployeeStatus @default(PENDING)
+  permissions Json?
+  lastLogin   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  vendorId    String
+  vendor      User           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([email, vendorId])
+  @@index([email, vendorId, status])
+}
+
+model Customer {
+  id           String        @id @default(uuid())
+  name         String?
+  phone        String?
+  email        String?
+  gender       Gender?
+  taxNumber    String?
+  rewards      Json?
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([phone, userId])
+  @@index([email, userId])
+}
+
+model Transaction {
+  id                 String              @id @default(uuid())
+  billerDetails      Json?
+  discountPercentage Float               @default(0)
+  phone              String
+  amount             Float
+  type               TransactionType     @default(CASH)
+  reward             Json?
+  description        String?
+  category           String?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  customerId         String?
+  userId             String
+  customer           Customer?           @relation(fields: [customerId], references: [id])
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items              TransactionItem[]
+  transactionAudits  TransactionAudit[]
+  invoiceGenerations InvoiceGeneration[]
+
+  @@index([phone, customerId, userId, createdAt])
+}
+
+model TransactionItem {
+  id            String      @id @default(uuid())
+  transactionId String
+  name          String
+  quantity      Int         @default(1)
+  price         Float
+  taxRate       Float       @default(0)
+  totalAmount   Float
+  description   String?
+  category      String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId, name])
+}
+
+model TransactionAudit {
+  id             String       @id @default(uuid())
+  transactionId  String?
+  originalValues Json
+  timestamp      DateTime     @default(now())
+  userId         String?  // Changed to optional
+  transaction    Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([transactionId, userId, timestamp])
+}
+
+model InvoiceGeneration {
+  id              String      @id @default(uuid())
+  transactionId   String
+  referenceNumber String
+  generatedAt     DateTime    @default(now())
+  generatedBy     String?
+  metadata        Json?
+  transaction     Transaction @relation(fields: [transactionId], references: [id])
+
+  @@index([transactionId, referenceNumber])
+  @@index([generatedAt])
+}
+
+model Promotion {
+  id                 String                @id @default(uuid())
+  name               String
+  description        String?
+  category           String
+  originalPrice      Float
+  updatedPrice       Float
+  discountPercent    Float
+  images             String[]
+  startDate          DateTime
+  endDate            DateTime
+  isActive           Boolean               @default(true)
+  maxRedemptions     Int?
+  currentRedemptions Int                   @default(0)
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  userId             String
+  defaultRuleId      String?
+  customRuleConfig   Json?
+  defaultRule        DefaultPromotionRule? @relation(fields: [defaultRuleId], references: [id])
+  user               User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([name, userId, startDate, endDate])
+}
+
+model CompanyDetails {
+  id             String       @id @default(uuid())
+  companyName    String
+  companyLogo    String?
+  companyAddress String
+  taxDetails     TaxDetails[] @relation("CompanyTaxDetails")
+  userId         String       @unique
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model TaxDetails {
+  id               String         @id @default(uuid())
+  taxType          TaxType
+  taxNumber        String
+  vendorId         String
+  companyDetailsId String
+  companyDetails   CompanyDetails @relation("CompanyTaxDetails", fields: [companyDetailsId], references: [id])
+  vendor           User           @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@index([taxType, vendorId])
+}
+
+model Subscription {
+  id          String             @id @default(cuid())
+  status      SubscriptionStatus @default(BASIC)
+  razorpayId  String?            @unique
+  trialEndsAt DateTime?
+  isTrialUsed Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String             @unique
+}
+
+model GiftCard {
+  id             String         @id @default(uuid())
+  code           String         @unique
+  amount         Float
+  description    String
+  terms          String?
+  validityDays   Int
+  expirationDate DateTime
+  status         GiftCardStatus @default(ACTIVE)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  redeemedAt     DateTime?
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([code, userId, status])
+}
+
+model RewardPolicy {
+  id        String           @id @default(uuid())
+  name      String
+  type      RewardPolicyType
+  config    Json
+  isActive  Boolean          @default(true)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  expiresAt DateTime?
+  expiry    Int?             @default(365)
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([name, userId])
+}
+
+model DefaultPromotionRule {
+  id          String      @id @default(uuid())
+  name        String
+  description String?
+  ruleConfig  Json
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  promotions  Promotion[]
+}
+
+enum RewardPolicyType {
+  PERCENTAGE_DISCOUNT
+  FIXED_DISCOUNT
+  FLAT_DISCOUNT
+  PERCENTAGE_CREDIT
+  FIXED_CREDIT
+  POINT_BASED
+  CUSTOM
+  NONE
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+  NA
+}
+
+enum TransactionType {
+  CASH
+  UPI
+  CREDIT
+  DEBIT
+  OTHER
+}
+
+enum SubscriptionStatus {
+  BASIC
+  TRIAL
+  PREMIUM
+}
+
+enum TaxType {
+  IGST
+  CGST
+  SGST
+  UTGST
+  VAT
+  NONE
+  OTHER
+}
+
+enum EmployeeStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+}
+
+
+enum GiftCardStatus {
+  ACTIVE
+  USED
+  EXPIRED
+  REVOKED
+}
