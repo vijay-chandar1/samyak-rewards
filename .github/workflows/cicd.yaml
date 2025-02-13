@@ -54,6 +54,11 @@ jobs:
           chmod 600 private_key.pem
 
           ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << 'EOF'
+          
+            echo "Starting Docker..."
+            sudo systemctl start docker
+            sudo systemctl enable docker
+          
             echo "Logging into AWS ECR..."
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REPO
             
