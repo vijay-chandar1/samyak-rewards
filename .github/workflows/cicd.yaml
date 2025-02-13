@@ -48,23 +48,36 @@ jobs:
           HOST: ${{ secrets.EC2_HOST }}
           USER: ${{ secrets.EC2_USER }}
           ECR_REPO: ${{ secrets.ECR_REPOSITORY }}
+          AWS_PROFILE: "default"  # Change this if your SSO profile is different
+          AWS_REGION: ${{ secrets.AWS_REGION }}
           CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}
         run: |
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
 
           ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << 'EOF'
-          
+            echo "Updating system and installing dependencies..."
+            sudo apt update && sudo apt install -y awscli docker.io jq
+
             echo "Starting Docker..."
             sudo systemctl start docker
             sudo systemctl enable docker
-          
+            sudo usermod -aG docker $USER
+
+            echo "Logging into AWS SSO..."
+            aws sso login --profile $AWS_PROFILE
+
+            echo "Checking AWS credentials..."
+            if ! aws sts get-caller-identity --profile $AWS_PROFILE > /dev/null 2>&1; then
+              echo "AWS SSO authentication failed! Please check your GitHub Secrets and profile settings."
+              exit 1
+            fi
+
             echo "Logging into AWS ECR..."
-            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REPO
-            
-            echo "Stopping and removing existing container..."
-            docker stop $CONTAINER_NAME || true
-            docker rm $CONTAINER_NAME || true
+            aws ecr get-login-password --region $AWS_REGION --profile $AWS_PROFILE | docker login --username AWS --password-stdin $ECR_REPO
+
+            echo "Stopping and removing existing container (if exists)..."
+            docker ps -q --filter "name=$CONTAINER_NAME" | grep -q . && docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME || echo "No running container found."
 
             echo "Pulling the latest image..."
             docker pull $ECR_REPO:latest
@@ -72,6 +85,3 @@ jobs:
             echo "Running the container..."
             docker run -d --name $CONTAINER_NAME --restart unless-stopped -p 80:3000 --env-file .env $ECR_REPO:latest
           EOF
-
-
-          
