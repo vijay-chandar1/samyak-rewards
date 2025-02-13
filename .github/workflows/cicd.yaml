@@ -1,103 +1,65 @@
-name: Deploy to EC2
+# name: Deploy to EC2
 
-on:
-  push:
-    branches:
-      - main  # Trigger when code is pushed to main
+# on:
+#   push:
+#     branches:
+#       - main  # Trigger when code is pushed to main
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+# jobs:
+#   deploy:
+#     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+#     steps:
+#       - name: Checkout Repository
+#         uses: actions/checkout@v3
 
-      # - name: Create .env file
-      #   run: |
-      #     echo "${{ secrets.ENV_FILE }}" | tr -d '\r' > .env
+#       # - name: Create .env file
+#       #   run: |
+#       #     echo "${{ secrets.ENV_FILE }}" | tr -d '\r' > .env
 
-      - name: Decode and create .env file
-        run: |
-          echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
+#       - name: Decode and create .env file
+#         run: |
+#           echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
 
-      # Configure AWS credentials
-      - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+#       # Configure AWS credentials
+#       - name: Configure AWS Credentials
+#         uses: aws-actions/configure-aws-credentials@v1
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v1
+#       - name: Log in to Amazon ECR
+#         uses: aws-actions/amazon-ecr-login@v1
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
+#       - name: Set up Docker Buildx
+#         uses: docker/setup-buildx-action@v2
         
-      - name: Build and Push Docker Image
-        run: |
-          IMAGE_TAG=${{ secrets.ECR_REPOSITORY }}:latest
-          docker build -t $IMAGE_TAG .
-          docker push $IMAGE_TAG
+#       - name: Build and Push Docker Image
+#         run: |
+#           IMAGE_TAG=${{ secrets.ECR_REPOSITORY }}:latest
+#           docker build -t $IMAGE_TAG .
+#           docker push $IMAGE_TAG
 
-      - name: Deploy to EC2
-        env:
-          PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          HOST: ${{ secrets.EC2_HOST }}
-          USER: ${{ secrets.EC2_USER }}
-          ECR_REPO: ${{ secrets.ECR_REPOSITORY }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
-          echo "$PRIVATE_KEY" > private_key.pem
-          chmod 600 private_key.pem
+#       - name: AWS SSM Send-Command
+#         uses: peterkimzz/aws-ssm-send-command@v1.1.1
+#         with:
+#           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#           aws-region: ${{ secrets.AWS_REGION }}
+#           instance-ids: ${{ secrets.AWS_INSTANCE_ID }}
+#           working-directory: /home/ubuntu
+#           command: |
+#             echo "Stopping old container..."
+#             sudo docker stop webapp || true
+#             sudo docker rm webapp || true
 
-          ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << 'EOF'
-            echo "Updating system and installing dependencies..."
-            sudo apt update
-            sudo apt install -y python3-pip jq
+#             echo "Pulling latest image..."
+#             sudo docker pull ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
 
-            echo "Installing AWS CLI..."
-            sudo pip3 install awscli
+#             echo "Running new container..."
+#             sudo docker run -d --name webapp -p 80:80 ${{ secrets.DOCKER_USERNAME }}/webapp:${{ github.sha }}
 
-            echo "Installing Docker..."
-            sudo apt remove -y containerd docker.io
-            sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
-            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-            sudo apt update
-            sudo apt install -y docker-ce docker-ce-cli containerd.io
-
-            echo "Starting Docker..."
-            sudo systemctl start docker
-            sudo systemctl enable docker
-            sudo usermod -aG docker $USER
-
-            echo "Configuring AWS credentials..."
-            mkdir -p ~/.aws
-            echo "[default]" > ~/.aws/credentials
-            echo "aws_access_key_id = $AWS_ACCESS_KEY_ID" >> ~/.aws/credentials
-            echo "aws_secret_access_key = $AWS_SECRET_ACCESS_KEY" >> ~/.aws/credentials
-            echo "region = $AWS_REGION" >> ~/.aws/credentials
-
-            echo "Checking AWS credentials..."
-            if ! aws sts get-caller-identity > /dev/null 2>&1; then
-              echo "AWS credentials not found, please check GitHub Secrets!"
-              exit 1
-            fi
-
-            echo "Logging into AWS ECR..."
-            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-
-            echo "Stopping and removing existing container (if exists)..."
-            docker ps -q --filter "name=$CONTAINER_NAME" | grep -q . && docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME || echo "No running container found."
-
-            echo "Pulling the latest image..."
-            docker pull $ECR_REPO:latest
-
-            echo "Running the container..."
-            docker run -d --name $CONTAINER_NAME --restart unless-stopped -p 80:3000 --env-file .env $ECR_REPO:latest
-          EOF
+#             echo "Cleaning up old images..."
+#             sudo docker image prune -af
+#           comment: "Re-deploying Docker container via AWS SSM."
