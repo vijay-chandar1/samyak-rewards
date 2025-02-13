@@ -28,7 +28,6 @@ jobs:
       run: |
         aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO }}
 
-
     - name: Build the Docker image
       run: docker build -t ${{ secrets.ECR_REPO }}:latest .
 
