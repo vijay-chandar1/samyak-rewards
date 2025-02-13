@@ -21,8 +21,8 @@ jobs:
 
     - name: Login to AWS ECR
       run: |
-        aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.ECR_REPO }}
-
+        aws ecr get-login-password --region <region> | sudo docker login --username AWS --password-stdin <aws-account-id>.dkr.ecr.<region>.amazonaws.com
+        
     - name: Pull Docker image from ECR
       run: sudo docker pull ${{ secrets.ECR_REPO }}:latest
 
