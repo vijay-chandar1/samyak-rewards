@@ -57,17 +57,26 @@ jobs:
 
           ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << 'EOF'
             echo "Updating system and installing dependencies..."
-            sudo apt update && sudo apt install -y python3-pip docker.io jq
+            sudo apt update
+            sudo apt install -y python3-pip jq
 
             echo "Installing AWS CLI..."
             sudo pip3 install awscli
-        
+
+            echo "Installing Docker..."
+            sudo apt remove -y containerd docker.io
+            sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            sudo apt update
+            sudo apt install -y docker-ce docker-ce-cli containerd.io
+
             echo "Starting Docker..."
             sudo systemctl start docker
             sudo systemctl enable docker
             sudo usermod -aG docker $USER
-            
-            echo "Checking AWS credentials..."
+
+            echo "Configuring AWS credentials..."
             mkdir -p ~/.aws
             echo "[default]" > ~/.aws/credentials
             echo "aws_access_key_id = $AWS_ACCESS_KEY_ID" >> ~/.aws/credentials
