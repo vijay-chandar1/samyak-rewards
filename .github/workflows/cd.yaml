@@ -19,6 +19,10 @@ jobs:
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
+    - name: Decode and create .env file
+      run: |
+        echo "${{ secrets.ENV_FILE_BASE64 }}" | base64 --decode > .env
+
     - name: Login to AWS ECR
       run: |
         aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | sudo docker login --username AWS --password-stdin ${{ secrets.ECR_REPO }}
