@@ -49,19 +49,26 @@ jobs:
           ECR_REPO: ${{ secrets.ECR_REPOSITORY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           echo "$PRIVATE_KEY" > private_key.pem
           chmod 600 private_key.pem
 
           ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << 'EOF'
-            echo "Updating system and installing dependencies..."
-            sudo apt update && sudo apt install -y awscli docker.io jq
-
+        
             echo "Starting Docker..."
             sudo systemctl start docker
             sudo systemctl enable docker
             sudo usermod -aG docker $USER
             
+            echo "Checking AWS credentials..."
+            mkdir -p ~/.aws
+            echo "[default]" > ~/.aws/credentials
+            echo "aws_access_key_id = $AWS_ACCESS_KEY_ID" >> ~/.aws/credentials
+            echo "aws_secret_access_key = $AWS_SECRET_ACCESS_KEY" >> ~/.aws/credentials
+            echo "region = $AWS_REGION" >> ~/.aws/credentials
+
             echo "Checking AWS credentials..."
             if ! aws sts get-caller-identity > /dev/null 2>&1; then
               echo "AWS credentials not found, please check GitHub Secrets!"
