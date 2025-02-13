@@ -61,18 +61,15 @@ jobs:
             sudo systemctl start docker
             sudo systemctl enable docker
             sudo usermod -aG docker $USER
-
-            echo "Logging into AWS SSO..."
-            aws sso login --profile $AWS_PROFILE
-
+            
             echo "Checking AWS credentials..."
-            if ! aws sts get-caller-identity --profile $AWS_PROFILE > /dev/null 2>&1; then
-              echo "AWS SSO authentication failed! Please check your GitHub Secrets and profile settings."
+            if ! aws sts get-caller-identity > /dev/null 2>&1; then
+              echo "AWS credentials not found, please check GitHub Secrets!"
               exit 1
             fi
 
             echo "Logging into AWS ECR..."
-            aws ecr get-login-password --region $AWS_REGION --profile $AWS_PROFILE | docker login --username AWS --password-stdin $ECR_REPO
+            aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
 
             echo "Stopping and removing existing container (if exists)..."
             docker ps -q --filter "name=$CONTAINER_NAME" | grep -q . && docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME || echo "No running container found."
