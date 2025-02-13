@@ -40,4 +40,33 @@ jobs:
         run: |
           IMAGE_TAG=${{ secrets.ECR_REPOSITORY }}:latest
           docker build -t $IMAGE_TAG .
-          docker push ${{ secrets.ECR_REPOSITORY }}:latest
+          docker push $IMAGE_TAG
+
+      - name: Deploy to EC2
+        env:
+          PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          HOST: ${{ secrets.EC2_HOST }}
+          USER: ${{ secrets.EC2_USER }}
+          ECR_REPO: ${{ secrets.ECR_REPOSITORY }}
+          CONTAINER_NAME: ${{ secrets.CONTAINER_NAME }}
+        run: |
+          echo "$PRIVATE_KEY" > private_key.pem
+          chmod 600 private_key.pem
+
+          ssh -o StrictHostKeyChecking=no -i private_key.pem $USER@$HOST << 'EOF'
+            echo "Logging into AWS ECR..."
+            aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | docker login --username AWS --password-stdin $ECR_REPO
+            
+            echo "Stopping and removing existing container..."
+            docker stop $CONTAINER_NAME || true
+            docker rm $CONTAINER_NAME || true
+
+            echo "Pulling the latest image..."
+            docker pull $ECR_REPO:latest
+
+            echo "Running the container..."
+            docker run -d --name $CONTAINER_NAME --restart unless-stopped -p 80:3000 --env-file .env $ECR_REPO:latest
+          EOF
+
+
+          
